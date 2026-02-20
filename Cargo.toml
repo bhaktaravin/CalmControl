@@ -1,0 +1,15 @@
+[package]
+name = "CalmControl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.7", features = ["form", "macros"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+bcrypt = "0.15"
+tower-sessions = "0.12"
+tower = { version = "0.4", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
