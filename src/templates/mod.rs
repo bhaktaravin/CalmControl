@@ -1,6 +1,7 @@
 use crate::models::{
     session::{DashboardStats, WeeklyMinutes},
     user::User,
+    video::{CATEGORIES, VideoWithUploader, category_label},
 };
 
 // ── Shared CSS (stored as a raw string to avoid brace-escaping inside format!) ─
@@ -187,6 +188,79 @@ const CSS: &str = r#"<style>
         border: 1.5px solid #74c69d;
         margin-top: 1.5rem;
     }
+    /* ── Video cards ── */
+    .video-card {
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.08);
+        transition: transform .2s, box-shadow .2s;
+        background: #fff;
+        border: none;
+        height: 100%;
+    }
+    .video-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.13);
+    }
+    .video-thumb {
+        width: 100%;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+        background: #e8f5e9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+    }
+    .video-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .category-badge {
+        display: inline-block;
+        padding: 3px 12px;
+        border-radius: 20px;
+        font-size: .78rem;
+        font-weight: 600;
+        letter-spacing: .3px;
+    }
+    .cat-breathing     { background:#d8f3dc; color:#1b4332; }
+    .cat-meditation    { background:#ede7f6; color:#4a148c; }
+    .cat-nutrition     { background:#fff3e0; color:#e65100; }
+    .cat-exercise      { background:#e3f2fd; color:#0d47a1; }
+    .cat-mental-health { background:#e0f2f1; color:#004d40; }
+    .cat-general       { background:#f5f5f5; color:#424242; }
+    /* ── Filter pills ── */
+    .filter-pill {
+        border: 1.5px solid #cde8d6;
+        border-radius: 20px;
+        padding: 5px 16px;
+        font-size: .85rem;
+        font-weight: 500;
+        cursor: pointer;
+        background: #fff;
+        color: var(--calm-mid);
+        transition: all .15s;
+    }
+    .filter-pill:hover,
+    .filter-pill.active {
+        background: var(--calm-mid);
+        color: #fff;
+        border-color: var(--calm-mid);
+    }
+    /* ── Video player ── */
+    .video-player-wrap {
+        border-radius: 16px;
+        overflow: hidden;
+        background: #000;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .video-player-wrap video {
+        width: 100%;
+        display: block;
+        max-height: 520px;
+    }
 </style>"#;
 
 // ── Shared base layout ─────────────────────────────────────────────────────────
@@ -197,6 +271,12 @@ fn base_layout(title: &str, content: &str, logged_in: bool) -> String {
               <a class="nav-link" href="/dashboard">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path d="M8 4a.5.5 0 0 1 .5.5V6a.5.5 0 0 1-1 0V4.5A.5.5 0 0 1 8 4zM3.732 5.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 10a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 10zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L9.650 7.292a.999.999 0 1 0 1.122 1.657l2.244-2.02a.389.389 0 0 0 .069-.527A.5.5 0 0 1 11.5 6.268z"/></svg>
                   Dashboard
+              </a>
+           </li>
+           <li class="nav-item">
+              <a class="nav-link" href="/videos">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path d="M0 1a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1zm4 0v6h6V1H4zm6 8H4v6h6V9zm-6-1h2v1H4V8zm0-3h2v1H4V5zm6 3h2v1h-2V8zm0-3h2v1h-2V5zM1 1v2h2V1H1zm2 3H1v2h2V4zM1 8v2h2V8H1zm2 3H1v2h2v-2z"/></svg>
+                  Videos
               </a>
            </li>
            <li class="nav-item">
@@ -949,4 +1029,246 @@ pub fn not_found_page() -> String {
 </div>"#;
 
     base_layout("404 Not Found", content, false)
+}
+
+// ── Videos browse page ─────────────────────────────────────────────────────────
+
+pub fn videos_page(videos: &[VideoWithUploader]) -> String {
+    let video_cards = if videos.is_empty() {
+        r#"<div class="col-12 text-center py-5">
+    <div style="font-size:4rem">🎬</div>
+    <h4 class="fw-bold text-calm mt-3 mb-2">No videos yet</h4>
+    <p class="text-muted mb-4">Be the first to share a health video with the community.</p>
+    <a href="/videos/new" class="btn btn-calm px-4">&#43; Add First Video</a>
+</div>"#
+            .to_string()
+    } else {
+        videos.iter().map(|v| {
+            let cat_slug = &v.category;
+            let cat_label = category_label(cat_slug);
+            let thumb = if v.thumbnail_url.is_empty() {
+                let icon = match cat_slug.as_str() {
+                    "breathing"     => "🌬️",
+                    "meditation"    => "🧘",
+                    "nutrition"     => "🥗",
+                    "exercise"      => "💪",
+                    "mental-health" => "🧠",
+                    _               => "🌿",
+                };
+                format!(r#"<div class="video-thumb">{icon}</div>"#)
+            } else {
+                format!(r#"<div class="video-thumb"><img src="{}" alt="thumbnail" loading="lazy"></div>"#, v.thumbnail_url)
+            };
+            let desc = if v.description.is_empty() {
+                String::new()
+            } else {
+                let short: String = v.description.chars().take(90).collect();
+                let ellipsis = if v.description.len() > 90 { "…" } else { "" };
+                format!(r#"<p class="text-muted mb-3" style="font-size:.88rem;line-height:1.5">{short}{ellipsis}</p>"#)
+            };
+            let id = &v.id;
+            let title = &v.title;
+            let uploader = &v.uploader_name;
+            let date = &v.created_at[..10];
+            format!(r#"<div class="col-12 col-sm-6 col-lg-4 video-item" data-category="{cat_slug}">
+    <div class="video-card">
+        <a href="/videos/{id}" style="text-decoration:none;color:inherit;">
+            {thumb}
+            <div class="p-3">
+                <span class="category-badge cat-{cat_slug} mb-2">{cat_label}</span>
+                <h6 class="fw-bold mt-2 mb-1" style="line-height:1.35">{title}</h6>
+                {desc}
+                <div class="d-flex justify-content-between align-items-center mt-auto">
+                    <small class="text-muted">&#128100; {uploader}</small>
+                    <small class="text-muted">{date}</small>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>"#)
+        }).collect::<Vec<_>>().join("\n")
+    };
+
+    let category_pills = {
+        let mut pills = String::from(
+            r#"<button class="filter-pill active me-2 mb-2" onclick="filterVideos('all', this)">All</button>"#,
+        );
+        for (slug, label) in CATEGORIES {
+            pills.push_str(&format!(
+                r#"<button class="filter-pill me-2 mb-2" onclick="filterVideos('{slug}', this)">{label}</button>"#
+            ));
+        }
+        pills
+    };
+
+    let content = format!(
+        r#"<!-- Header -->
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold text-calm mb-1">&#127909;&nbsp; Health Videos</h2>
+        <p class="text-muted mb-0">Curated wellness content from our community</p>
+    </div>
+    <a href="/videos/new" class="btn btn-calm px-4">&#43;&nbsp; Add Video</a>
+</div>
+
+<!-- Category filter -->
+<div class="mb-4">
+    {category_pills}
+</div>
+
+<!-- Grid -->
+<div class="row g-4" id="video-grid">
+    {video_cards}
+</div>
+
+<script>
+function filterVideos(cat, btn) {{
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.video-item').forEach(el => {{
+        el.style.display = (cat === 'all' || el.dataset.category === cat) ? '' : 'none';
+    }});
+}}
+</script>"#
+    );
+
+    base_layout("Videos", &content, true)
+}
+
+// ── New video form ─────────────────────────────────────────────────────────────
+
+pub fn new_video_page(error: Option<&str>) -> String {
+    let alert = error.map(|e| error_alert(e)).unwrap_or_default();
+
+    let category_options = CATEGORIES
+        .iter()
+        .map(|(slug, label)| format!(r#"<option value="{slug}">{label}</option>"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let content = format!(
+        r#"{alert}
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-7">
+
+        <h2 class="fw-bold text-calm mb-1">&#127909;&nbsp; Add a Health Video</h2>
+        <p class="text-muted mb-4">Share a wellness video with the community. Paste a direct video URL&nbsp;(.mp4, .webm, etc.).</p>
+
+        <form method="POST" action="/videos">
+
+            <div class="card p-4 mb-4">
+                <!-- Title -->
+                <div class="mb-3">
+                    <label class="form-label" for="title">Title <span class="text-danger">*</span></label>
+                    <input type="text" id="title" name="title" class="form-control"
+                           placeholder="e.g. 5-Minute Morning Stretch" required maxlength="120">
+                </div>
+
+                <!-- Category -->
+                <div class="mb-3">
+                    <label class="form-label" for="category">Category <span class="text-danger">*</span></label>
+                    <select id="category" name="category" class="form-control" required>
+                        <option value="" disabled selected>Select a category&hellip;</option>
+                        {category_options}
+                    </select>
+                </div>
+
+                <!-- Video URL -->
+                <div class="mb-3">
+                    <label class="form-label" for="video_url">Video URL <span class="text-danger">*</span></label>
+                    <input type="url" id="video_url" name="video_url" class="form-control"
+                           placeholder="https://example.com/video.mp4" required>
+                    <div class="form-text">Paste a direct link to an .mp4 or .webm file.</div>
+                </div>
+
+                <!-- Thumbnail URL -->
+                <div class="mb-3">
+                    <label class="form-label" for="thumbnail_url">Thumbnail URL <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="url" id="thumbnail_url" name="thumbnail_url" class="form-control"
+                           placeholder="https://example.com/thumb.jpg">
+                    <div class="form-text">A preview image for the video card. Leave blank for a default icon.</div>
+                </div>
+
+                <!-- Description -->
+                <div class="mb-0">
+                    <label class="form-label" for="description">Description <span class="text-muted fw-normal">(optional)</span></label>
+                    <textarea id="description" name="description" class="form-control" rows="4"
+                              placeholder="What does this video cover? Who is it for?" style="resize:vertical;"></textarea>
+                </div>
+            </div>
+
+            <div class="d-flex gap-3">
+                <button type="submit" class="btn btn-calm flex-fill py-3">
+                    &#127909;&nbsp; Add Video
+                </button>
+                <a href="/videos" class="btn flex-fill py-3"
+                   style="border:1.5px solid #2d6a4f;color:#2d6a4f;border-radius:10px;font-weight:500;">
+                    Cancel
+                </a>
+            </div>
+
+        </form>
+
+    </div>
+</div>"#
+    );
+
+    base_layout("Add Video", &content, true)
+}
+
+// ── Video player page ──────────────────────────────────────────────────────────
+
+pub fn video_player_page(video: &VideoWithUploader) -> String {
+    let cat_slug = &video.category;
+    let cat_label = category_label(cat_slug);
+    let title = &video.title;
+    let description = &video.description;
+    let uploader = &video.uploader_name;
+    let date = &video.created_at[..10];
+    let video_url = &video.video_url;
+
+    let desc_block = if description.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card p-4 mb-4">
+    <h5 class="fw-bold text-calm mb-2">About this video</h5>
+    <p class="mb-0" style="line-height:1.7">{description}</p>
+</div>"#
+        )
+    };
+
+    let content = format!(
+        r#"<div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+
+        <!-- Player -->
+        <div class="video-player-wrap mb-4">
+            <video controls autoplay preload="metadata">
+                <source src="{video_url}">
+                Your browser does not support the HTML5 video tag.
+            </video>
+        </div>
+
+        <!-- Meta -->
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+            <div>
+                <span class="category-badge cat-{cat_slug} mb-2">{cat_label}</span>
+                <h3 class="fw-bold mt-2 mb-1">{title}</h3>
+                <small class="text-muted">&#128100; {uploader} &nbsp;&bull;&nbsp; {date}</small>
+            </div>
+            <a href="/videos" class="btn py-2 px-4"
+               style="border:1.5px solid var(--calm-mid);color:var(--calm-mid);border-radius:10px;font-weight:500;white-space:nowrap;">
+                &#8592;&nbsp; All Videos
+            </a>
+        </div>
+
+        {desc_block}
+
+    </div>
+</div>"#
+    );
+
+    base_layout(title, &content, true)
 }

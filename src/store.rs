@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::models::{
     session::{DashboardStats, WeeklyMinutes},
     user::User,
+    video::VideoWithUploader,
 };
 
 #[derive(Clone, Debug)]
@@ -170,6 +171,67 @@ impl UserStore {
         }
 
         result
+    }
+
+    // ── Videos ─────────────────────────────────────────────────────────────────
+
+    pub async fn create_video(
+        &self,
+        user_id: &str,
+        title: String,
+        description: String,
+        video_url: String,
+        thumbnail_url: String,
+        category: String,
+    ) -> Result<String, String> {
+        let id = Uuid::new_v4().to_string();
+
+        sqlx::query(
+            "INSERT INTO videos (id, user_id, title, description, video_url, thumbnail_url, category)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(user_id)
+        .bind(&title)
+        .bind(&description)
+        .bind(&video_url)
+        .bind(&thumbnail_url)
+        .bind(&category)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        Ok(id)
+    }
+
+    pub async fn get_all_videos(&self) -> Vec<VideoWithUploader> {
+        sqlx::query_as::<_, VideoWithUploader>(
+            "SELECT v.id, v.user_id, v.title, v.description, v.video_url,
+                    v.thumbnail_url, v.category, v.created_at,
+                    u.name AS uploader_name
+             FROM videos v
+             JOIN users u ON v.user_id = u.id
+             ORDER BY v.created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+    }
+
+    pub async fn get_video_by_id(&self, id: &str) -> Option<VideoWithUploader> {
+        sqlx::query_as::<_, VideoWithUploader>(
+            "SELECT v.id, v.user_id, v.title, v.description, v.video_url,
+                    v.thumbnail_url, v.category, v.created_at,
+                    u.name AS uploader_name
+             FROM videos v
+             JOIN users u ON v.user_id = u.id
+             WHERE v.id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .ok()
+        .flatten()
     }
 }
 

@@ -56,5 +56,21 @@ async fn init_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS videos (
+            id            TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL,
+            title         TEXT NOT NULL,
+            description   TEXT NOT NULL DEFAULT '',
+            video_url     TEXT NOT NULL,
+            thumbnail_url TEXT NOT NULL DEFAULT '',
+            category      TEXT NOT NULL DEFAULT 'general',
+            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

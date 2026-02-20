@@ -15,7 +15,7 @@ mod state;
 mod store;
 mod templates;
 
-use handlers::{auth, dashboard, profile, sessions};
+use handlers::{auth, dashboard, profile, sessions, videos};
 use state::AppState;
 use store::UserStore;
 
@@ -64,6 +64,12 @@ async fn main() {
             "/journal",
             get(sessions::show_journal).post(sessions::submit_journal),
         )
+        .route(
+            "/videos",
+            get(videos::show_videos).post(videos::create_video),
+        )
+        .route("/videos/new", get(videos::show_new_video))
+        .route("/videos/:id", get(videos::show_video))
         .route("/health", get(health))
         .fallback(not_found)
         .with_state(app_state)
