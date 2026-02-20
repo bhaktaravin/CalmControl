@@ -1,4 +1,5 @@
 use crate::models::{
+    newsletter::NewsletterArticle,
     session::{DashboardStats, WeeklyMinutes},
     user::User,
     video::{CATEGORIES, VideoWithUploader, category_label},
@@ -261,6 +262,57 @@ const CSS: &str = r#"<style>
         display: block;
         max-height: 520px;
     }
+    /* ── Newsletter ── */
+    .newsletter-card {
+        border-radius: 18px;
+        border: none;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+        transition: transform .2s, box-shadow .2s;
+        background: #fff;
+        overflow: hidden;
+    }
+    .newsletter-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 36px rgba(0,0,0,0.12);
+    }
+    .newsletter-hero {
+        background: linear-gradient(135deg, #1b4332 0%, #40916c 60%, #74c69d 100%);
+        border-radius: 20px;
+        color: #fff;
+        padding: 3rem 2.5rem;
+        margin-bottom: 3rem;
+    }
+    .subscribe-box {
+        background: rgba(255,255,255,0.15);
+        border-radius: 14px;
+        padding: 1.5rem 2rem;
+        backdrop-filter: blur(4px);
+    }
+    .subscribe-box .form-control {
+        border: none;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.92);
+    }
+    .subscribe-box .form-control:focus {
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.4);
+    }
+    .article-content img { max-width: 100%; border-radius: 12px; }
+    .article-content h1, .article-content h2, .article-content h3 {
+        color: var(--calm-dark);
+        margin-top: 1.8rem;
+    }
+    .article-content p { line-height: 1.8; }
+    .article-content a { color: var(--calm-light); }
+    .source-chip {
+        display: inline-block;
+        background: #f0f7f4;
+        border: 1px solid #cde8d6;
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: .8rem;
+        color: var(--calm-mid);
+        margin: 2px;
+    }
 </style>"#;
 
 // ── Shared base layout ─────────────────────────────────────────────────────────
@@ -280,6 +332,12 @@ fn base_layout(title: &str, content: &str, logged_in: bool) -> String {
               </a>
            </li>
            <li class="nav-item">
+              <a class="nav-link" href="/newsletter">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2Zm13 2.383-4.708 2.825L15 11.105V5.383Zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/></svg>
+                  Newsletter
+              </a>
+           </li>
+           <li class="nav-item">
               <a class="nav-link" href="/profile">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"/></svg>
                   Profile
@@ -293,6 +351,12 @@ fn base_layout(title: &str, content: &str, logged_in: bool) -> String {
            </li>"#
     } else {
         r#"<li class="nav-item">
+              <a class="nav-link" href="/newsletter">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2Zm13 2.383-4.708 2.825L15 11.105V5.383Zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741ZM1 11.105l4.708-2.897L1 5.383v5.722Z"/></svg>
+                  Newsletter
+              </a>
+           </li>
+           <li class="nav-item">
               <a class="nav-link" href="/login">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px"><path fill-rule="evenodd" d="M6 3.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 0-1 0v2A1.5 1.5 0 0 0 6.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-8A1.5 1.5 0 0 0 5 3.5v2a.5.5 0 0 0 1 0v-2z"/><path fill-rule="evenodd" d="M11.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L10.293 7.5H1.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/></svg>
                   Login
@@ -1271,4 +1335,261 @@ pub fn video_player_page(video: &VideoWithUploader) -> String {
     );
 
     base_layout(title, &content, true)
+}
+
+// ── Newsletter archive page ────────────────────────────────────────────────────
+
+pub fn newsletter_page(articles: &[NewsletterArticle]) -> String {
+    let article_cards = if articles.is_empty() {
+        r#"<div class="col-12 text-center py-5">
+    <div style="font-size:4rem">📬</div>
+    <h4 class="fw-bold text-calm mt-3 mb-2">No issues yet</h4>
+    <p class="text-muted">The first newsletter issue will appear here once it's published.</p>
+</div>"#
+            .to_string()
+    } else {
+        articles.iter().map(|a| {
+            let id = &a.id;
+            let title = &a.title;
+            let date = &a.published_at[..10];
+            let summary = if a.summary.is_empty() {
+                String::new()
+            } else {
+                let short: String = a.summary.chars().take(120).collect();
+                let ellipsis = if a.summary.len() > 120 { "…" } else { "" };
+                format!(r#"<p class="text-muted mb-3" style="font-size:.9rem;line-height:1.6">{short}{ellipsis}</p>"#)
+            };
+            format!(r#"<div class="col-12 col-md-6 col-lg-4">
+    <div class="newsletter-card h-100">
+        <div class="p-4 d-flex flex-column h-100">
+            <small class="text-muted mb-2">📅 {date}</small>
+            <h5 class="fw-bold text-calm mb-2" style="line-height:1.35">{title}</h5>
+            {summary}
+            <div class="mt-auto pt-2">
+                <a href="/newsletter/{id}" class="btn btn-calm btn-sm px-4">
+                    Read Issue →
+                </a>
+            </div>
+        </div>
+    </div>
+</div>"#)
+        }).collect::<Vec<_>>().join("\n")
+    };
+
+    let content = format!(
+        r#"<!-- Hero + subscribe -->
+<div class="newsletter-hero mb-5">
+    <div class="row align-items-center">
+        <div class="col-12 col-md-6 mb-4 mb-md-0">
+            <h1 class="fw-bold mb-2" style="font-size:2.2rem">📬 CalmControl Newsletter</h1>
+            <p class="mb-0" style="opacity:.9;font-size:1.05rem">
+                Weekly health &amp; wellness insights delivered straight to your inbox.
+                Breathe easier. Live better.
+            </p>
+        </div>
+        <div class="col-12 col-md-6">
+            <div class="subscribe-box">
+                <p class="fw-semibold mb-3">Get the weekly digest — free, forever.</p>
+                <form method="POST" action="/newsletter/subscribe" class="d-flex gap-2 flex-wrap">
+                    <input type="email" name="email" class="form-control flex-fill"
+                           placeholder="your@email.com" required style="min-width:180px;">
+                    <button type="submit" class="btn btn-calm px-4">Subscribe</button>
+                </form>
+                <input type="hidden" name="name" value="">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Archive grid -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <h3 class="fw-bold text-calm mb-0">Past Issues</h3>
+    <span class="text-muted" style="font-size:.9rem">{count} issue{plural}</span>
+</div>
+
+<div class="row g-4">
+    {article_cards}
+</div>"#,
+        count = articles.len(),
+        plural = if articles.len() == 1 { "" } else { "s" },
+    );
+
+    base_layout("Newsletter", &content, false)
+}
+
+// ── Newsletter article page ────────────────────────────────────────────────────
+
+pub fn newsletter_article_page(article: &NewsletterArticle) -> String {
+    let title = &article.title;
+    let date = &article.published_at[..10];
+    let content_html = &article.content_html;
+
+    let sources_block = if article.source_urls.is_empty() {
+        String::new()
+    } else {
+        let chips: String = article
+            .source_urls
+            .split(',')
+            .filter(|s| !s.trim().is_empty())
+            .map(|url| {
+                let url = url.trim();
+                let label = url
+                    .trim_start_matches("https://")
+                    .trim_start_matches("http://")
+                    .split('/')
+                    .next()
+                    .unwrap_or(url);
+                format!(r#"<a href="{url}" target="_blank" rel="noopener" class="source-chip">{label}</a>"#)
+            })
+            .collect();
+        format!(
+            r#"<div class="card p-4 mt-4">
+    <h6 class="fw-bold text-calm mb-2">📎 Sources</h6>
+    <div>{chips}</div>
+</div>"#
+        )
+    };
+
+    let content = format!(
+        r#"<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+
+        <!-- Back + meta -->
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <a href="/newsletter" class="text-muted" style="font-size:.9rem">← All Issues</a>
+            <span class="text-muted" style="font-size:.85rem">|</span>
+            <small class="text-muted">📅 {date}</small>
+        </div>
+
+        <!-- Title -->
+        <h1 class="fw-bold text-calm mb-4" style="line-height:1.25">{title}</h1>
+
+        <!-- Content -->
+        <div class="card p-4 p-md-5">
+            <div class="article-content">
+                {content_html}
+            </div>
+        </div>
+
+        {sources_block}
+
+        <!-- Subscribe CTA -->
+        <div class="newsletter-hero mt-5" style="padding:2rem 2.5rem;">
+            <h5 class="fw-bold mb-2">Enjoyed this issue?</h5>
+            <p class="mb-3" style="opacity:.9">Get the weekly digest delivered to your inbox.</p>
+            <form method="POST" action="/newsletter/subscribe" class="d-flex gap-2 flex-wrap">
+                <input type="hidden" name="name" value="">
+                <input type="email" name="email" class="form-control"
+                       placeholder="your@email.com" required
+                       style="max-width:280px;border:none;border-radius:8px;">
+                <button type="submit" class="btn btn-calm px-4">Subscribe Free</button>
+            </form>
+        </div>
+
+    </div>
+</div>"#
+    );
+
+    base_layout(title, &content, false)
+}
+
+// ── Newsletter subscribe page ──────────────────────────────────────────────────
+
+pub fn newsletter_subscribe_page(success: bool, error: Option<&str>) -> String {
+    let body = if success {
+        r#"<div class="text-center py-4">
+    <div style="font-size:4rem">🎉</div>
+    <h3 class="fw-bold text-calm mt-3 mb-2">You're subscribed!</h3>
+    <p class="text-muted mb-4">
+        Welcome to the CalmControl weekly newsletter.<br>
+        You'll receive your first issue next Monday.
+    </p>
+    <a href="/newsletter" class="btn btn-calm px-5 py-2">Browse Past Issues →</a>
+</div>"#
+            .to_string()
+    } else {
+        let alert = error.map(|e| error_alert(e)).unwrap_or_default();
+        format!(
+            r#"{alert}
+<div class="text-center mb-4">
+    <div style="font-size:3.5rem">📬</div>
+    <h3 class="fw-bold text-calm mt-3 mb-1">Join the Newsletter</h3>
+    <p class="text-muted">Weekly wellness insights. No spam, ever. Unsubscribe anytime.</p>
+</div>
+<form method="POST" action="/newsletter/subscribe">
+    <div class="mb-3">
+        <label class="form-label" for="name">Name <span class="text-muted fw-normal">(optional)</span></label>
+        <input type="text" id="name" name="name" class="form-control"
+               placeholder="Your name" maxlength="80">
+    </div>
+    <div class="mb-4">
+        <label class="form-label" for="email">Email address <span class="text-danger">*</span></label>
+        <input type="email" id="email" name="email" class="form-control"
+               placeholder="you@example.com" required>
+    </div>
+    <div class="d-grid">
+        <button type="submit" class="btn btn-calm py-3 fs-5">
+            ✉️&nbsp; Subscribe Free
+        </button>
+    </div>
+</form>
+<p class="text-muted text-center mt-3" style="font-size:.82rem">
+    By subscribing you agree to receive weekly emails from CalmControl.
+    You can unsubscribe at any time.
+</p>"#
+        )
+    };
+
+    let content = format!(
+        r#"<div class="row justify-content-center">
+    <div class="col-12 col-sm-9 col-md-6 col-lg-5">
+        <div class="card p-4 p-md-5">
+            {body}
+        </div>
+        <div class="text-center mt-3">
+            <a href="/newsletter" class="text-muted" style="font-size:.9rem">← Back to Newsletter</a>
+        </div>
+    </div>
+</div>"#
+    );
+
+    base_layout("Subscribe", &content, false)
+}
+
+// ── Newsletter unsubscribe page ────────────────────────────────────────────────
+
+pub fn newsletter_unsubscribe_page(success: bool) -> String {
+    let body = if success {
+        r#"<div style="font-size:3.5rem">👋</div>
+<h3 class="fw-bold mt-3 mb-2" style="color:#555">You've been unsubscribed</h3>
+<p class="text-muted mb-4">
+    You won't receive any more emails from CalmControl.<br>
+    We're sorry to see you go!
+</p>
+<a href="/newsletter/subscribe" class="btn btn-calm px-4 me-2">Re-subscribe</a>
+<a href="/newsletter" class="btn px-4"
+   style="border:1.5px solid var(--calm-mid);color:var(--calm-mid);border-radius:10px;font-weight:500">
+    Browse Issues
+</a>"#
+    } else {
+        r#"<div style="font-size:3.5rem">🤔</div>
+<h3 class="fw-bold mt-3 mb-2" style="color:#555">Link not found</h3>
+<p class="text-muted mb-4">
+    This unsubscribe link is invalid or has already been used.<br>
+    If you're still receiving emails, please contact us.
+</p>
+<a href="/newsletter" class="btn btn-calm px-4">Back to Newsletter</a>"#
+    };
+
+    let content = format!(
+        r#"<div class="row justify-content-center">
+    <div class="col-12 col-sm-9 col-md-6 col-lg-5">
+        <div class="card p-5 text-center">
+            {body}
+        </div>
+    </div>
+</div>"#
+    );
+
+    base_layout("Unsubscribe", &content, false)
 }

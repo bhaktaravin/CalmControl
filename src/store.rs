@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::models::{
+    newsletter::{NewsletterArticle, NewsletterSubscriber},
     session::{DashboardStats, WeeklyMinutes},
     user::User,
     video::VideoWithUploader,
@@ -226,6 +227,138 @@ impl UserStore {
              FROM videos v
              JOIN users u ON v.user_id = u.id
              WHERE v.id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .ok()
+        .flatten()
+    }
+
+    // ── Newsletter subscribers ─────────────────────────────────────────────────
+
+    pub async fn subscribe(
+        &self,
+        email: String,
+        name: String,
+    ) -> Result<NewsletterSubscriber, String> {
+        let existing = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM newsletter_subscribers WHERE email = ?",
+        )
+        .bind(&email)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if existing > 0 {
+            return Err("This email is already subscribed.".to_string());
+        }
+
+        let sub = NewsletterSubscriber {
+            id: Uuid::new_v4().to_string(),
+            email: email.clone(),
+            name: name.clone(),
+            unsubscribe_token: Uuid::new_v4().to_string(),
+            subscribed_at: String::new(), // filled by DB default
+        };
+
+        sqlx::query(
+            "INSERT INTO newsletter_subscribers (id, email, name, unsubscribe_token)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(&sub.id)
+        .bind(&sub.email)
+        .bind(&sub.name)
+        .bind(&sub.unsubscribe_token)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // Re-fetch so we get the DB-generated subscribed_at
+        self.get_subscriber_by_id(&sub.id)
+            .await
+            .ok_or_else(|| "Failed to retrieve subscriber after insert.".to_string())
+    }
+
+    pub async fn get_subscriber_by_id(&self, id: &str) -> Option<NewsletterSubscriber> {
+        sqlx::query_as::<_, NewsletterSubscriber>(
+            "SELECT id, email, name, unsubscribe_token, subscribed_at
+             FROM newsletter_subscribers WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .ok()
+        .flatten()
+    }
+
+    pub async fn unsubscribe_by_token(&self, token: &str) -> Result<(), String> {
+        let rows = sqlx::query("DELETE FROM newsletter_subscribers WHERE unsubscribe_token = ?")
+            .bind(token)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if rows.rows_affected() == 0 {
+            Err("Unsubscribe link is invalid or already used.".to_string())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn get_all_subscribers(&self) -> Vec<NewsletterSubscriber> {
+        sqlx::query_as::<_, NewsletterSubscriber>(
+            "SELECT id, email, name, unsubscribe_token, subscribed_at
+             FROM newsletter_subscribers ORDER BY subscribed_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+    }
+
+    // ── Newsletter articles ────────────────────────────────────────────────────
+
+    pub async fn create_newsletter_article(
+        &self,
+        title: String,
+        summary: String,
+        content_html: String,
+        source_urls: String,
+    ) -> Result<NewsletterArticle, String> {
+        let id = Uuid::new_v4().to_string();
+
+        sqlx::query(
+            "INSERT INTO newsletter_articles (id, title, summary, content_html, source_urls)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&title)
+        .bind(&summary)
+        .bind(&content_html)
+        .bind(&source_urls)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        self.get_newsletter_article_by_id(&id)
+            .await
+            .ok_or_else(|| "Failed to retrieve article after insert.".to_string())
+    }
+
+    pub async fn get_all_newsletter_articles(&self) -> Vec<NewsletterArticle> {
+        sqlx::query_as::<_, NewsletterArticle>(
+            "SELECT id, title, summary, content_html, source_urls, published_at
+             FROM newsletter_articles ORDER BY published_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+    }
+
+    pub async fn get_newsletter_article_by_id(&self, id: &str) -> Option<NewsletterArticle> {
+        sqlx::query_as::<_, NewsletterArticle>(
+            "SELECT id, title, summary, content_html, source_urls, published_at
+             FROM newsletter_articles WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)

@@ -72,5 +72,30 @@ async fn init_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+            id                TEXT PRIMARY KEY,
+            email             TEXT UNIQUE NOT NULL,
+            name              TEXT NOT NULL DEFAULT '',
+            unsubscribe_token TEXT UNIQUE NOT NULL,
+            subscribed_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS newsletter_articles (
+            id           TEXT PRIMARY KEY,
+            title        TEXT NOT NULL,
+            summary      TEXT NOT NULL DEFAULT '',
+            content_html TEXT NOT NULL DEFAULT '',
+            source_urls  TEXT NOT NULL DEFAULT '',
+            published_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

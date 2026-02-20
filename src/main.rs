@@ -15,7 +15,7 @@ mod state;
 mod store;
 mod templates;
 
-use handlers::{auth, dashboard, profile, sessions, videos};
+use handlers::{auth, dashboard, newsletter, profile, sessions, videos};
 use state::AppState;
 use store::UserStore;
 
@@ -70,6 +70,24 @@ async fn main() {
         )
         .route("/videos/new", get(videos::show_new_video))
         .route("/videos/:id", get(videos::show_video))
+        .route("/newsletter", get(newsletter::show_newsletter))
+        .route("/newsletter/:id", get(newsletter::show_article))
+        .route(
+            "/newsletter/subscribe",
+            get(newsletter::show_subscribe).post(newsletter::process_subscribe),
+        )
+        .route(
+            "/newsletter/unsubscribe",
+            get(newsletter::process_unsubscribe),
+        )
+        .route(
+            "/api/newsletter/subscribers",
+            get(newsletter::api_get_subscribers),
+        )
+        .route(
+            "/api/newsletter/article",
+            post(newsletter::api_post_article),
+        )
         .route("/health", get(health))
         .fallback(not_found)
         .with_state(app_state)
