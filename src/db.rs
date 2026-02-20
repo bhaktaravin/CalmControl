@@ -43,5 +43,18 @@ async fn init_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS journal_entries (
+            id         TEXT PRIMARY KEY,
+            user_id    TEXT NOT NULL,
+            mood       INTEGER NOT NULL CHECK(mood BETWEEN 1 AND 5),
+            note       TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

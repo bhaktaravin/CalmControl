@@ -1,4 +1,7 @@
-use crate::models::user::User;
+use crate::models::{
+    session::{DashboardStats, WeeklyMinutes},
+    user::User,
+};
 
 // ── Shared CSS (stored as a raw string to avoid brace-escaping inside format!) ─
 
@@ -102,6 +105,88 @@ const CSS: &str = r#"<style>
         transition: opacity .2s;
     }
     .bar:hover { opacity: 1; }
+    .bar.active-bar {
+        background: linear-gradient(to top, #2d6a4f, #52b788);
+        opacity: 1;
+    }
+    /* ── Breathing circle ── */
+    .breath-circle {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 35%, #74c69d, #2d6a4f);
+        margin: 2rem auto;
+        transition: transform 4s ease-in-out, box-shadow 4s ease-in-out;
+        box-shadow: 0 0 40px rgba(82,183,136,0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 2.5rem;
+    }
+    .breath-circle.expand {
+        transform: scale(1.45);
+        box-shadow: 0 0 70px rgba(82,183,136,0.55);
+    }
+    /* ── Meditation orb ── */
+    .meditate-orb {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 35%, #b39ddb, #512da8);
+        margin: 2rem auto;
+        animation: meditate-pulse 6s ease-in-out infinite;
+        box-shadow: 0 0 50px rgba(123,63,140,0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 2.5rem;
+    }
+    @keyframes meditate-pulse {
+        0%, 100% { transform: scale(1);    box-shadow: 0 0 40px rgba(123,63,140,0.30); }
+        50%       { transform: scale(1.15); box-shadow: 0 0 80px rgba(123,63,140,0.55); }
+    }
+    /* ── Progress bar ── */
+    .calm-progress {
+        height: 8px;
+        border-radius: 4px;
+        background: #d8f3dc;
+        overflow: hidden;
+        margin: 1rem 0;
+    }
+    .calm-progress-bar {
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #40916c, #74c69d);
+        transition: width 1s linear;
+    }
+    /* ── Mood picker ── */
+    .mood-option input { display: none; }
+    .mood-option label {
+        font-size: 2.2rem;
+        cursor: pointer;
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 12px;
+        transition: transform .15s, background .15s;
+        line-height: 1;
+    }
+    .mood-option input:checked + label,
+    .mood-option label:hover {
+        background: var(--calm-pale);
+        transform: scale(1.25);
+    }
+    /* ── Session complete banner ── */
+    .session-done-banner {
+        display: none;
+        background: linear-gradient(135deg, #d8f3dc, #b7e4c7);
+        border-radius: 16px;
+        padding: 20px 28px;
+        text-align: center;
+        border: 1.5px solid #74c69d;
+        margin-top: 1.5rem;
+    }
 </style>"#;
 
 // ── Shared base layout ─────────────────────────────────────────────────────────
@@ -312,9 +397,13 @@ pub fn register_page(error: Option<&str>) -> String {
 
 // ── Dashboard page ─────────────────────────────────────────────────────────────
 
-pub fn dashboard_page(user: &User) -> String {
+pub fn dashboard_page(user: &User, stats: &DashboardStats, weekly: &WeeklyMinutes) -> String {
     let first_name = user.name.split_whitespace().next().unwrap_or(&user.name);
-    let bars = weekly_bars();
+    let bars = weekly_bars(weekly);
+    let sessions_today = stats.sessions_today;
+    let streak = stats.streak;
+    let total_minutes = stats.total_minutes;
+    let tip = weekly_tip(stats);
 
     let content = format!(
         r#"<!-- Header row -->
@@ -336,7 +425,7 @@ pub fn dashboard_page(user: &User) -> String {
                 <span class="fw-semibold" style="font-size:1.05rem">Sessions Today</span>
                 <span style="font-size:1.5rem">&#128197;</span>
             </div>
-            <div class="display-6 fw-bold">0</div>
+            <div class="display-6 fw-bold">{sessions_today}</div>
             <small style="opacity:.75">Completed sessions</small>
         </div>
     </div>
@@ -346,7 +435,7 @@ pub fn dashboard_page(user: &User) -> String {
                 <span class="fw-semibold" style="font-size:1.05rem">Day Streak</span>
                 <span style="font-size:1.5rem">&#128293;</span>
             </div>
-            <div class="display-6 fw-bold">0</div>
+            <div class="display-6 fw-bold">{streak}</div>
             <small style="opacity:.75">Consecutive days</small>
         </div>
     </div>
@@ -356,7 +445,7 @@ pub fn dashboard_page(user: &User) -> String {
                 <span class="fw-semibold" style="font-size:1.05rem">Mindful Minutes</span>
                 <span style="font-size:1.5rem">&#9200;</span>
             </div>
-            <div class="display-6 fw-bold">0</div>
+            <div class="display-6 fw-bold">{total_minutes}</div>
             <small style="opacity:.75">Total time practised</small>
         </div>
     </div>
@@ -368,15 +457,15 @@ pub fn dashboard_page(user: &User) -> String {
         <div class="card p-4 h-100">
             <h5 class="fw-bold text-calm mb-3">&#9889;&nbsp; Quick Start</h5>
             <div class="d-grid gap-2">
-                <button class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
+                <a href="/breathe" class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
                     &#128168;&nbsp; 5-min Breathing Exercise
-                </button>
-                <button class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
+                </a>
+                <a href="/meditate" class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
                     &#127774;&nbsp; 10-min Guided Meditation
-                </button>
-                <button class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
+                </a>
+                <a href="/journal" class="btn btn-outline-success rounded-3 text-start py-3 px-4" style="border-color:#cde8d6">
                     &#128221;&nbsp; Daily Mood Journal
-                </button>
+                </a>
             </div>
         </div>
     </div>
@@ -397,7 +486,7 @@ pub fn dashboard_page(user: &User) -> String {
                 <small class="text-muted">Sun</small>
             </div>
             <p class="text-muted mt-3 mb-0" style="font-size:.85rem">
-                &#128161; Complete your first session to start tracking progress!
+                {tip}
             </p>
         </div>
     </div>
@@ -407,14 +496,359 @@ pub fn dashboard_page(user: &User) -> String {
     base_layout("Dashboard", &content, true)
 }
 
-/// Renders seven placeholder bar chart columns.
-fn weekly_bars() -> String {
-    let heights: [u8; 7] = [20, 45, 60, 30, 75, 50, 10];
-    heights
+/// Renders seven bar chart columns driven by real weekly data.
+fn weekly_bars(minutes: &WeeklyMinutes) -> String {
+    let max = *minutes.iter().max().unwrap_or(&0);
+    minutes
         .iter()
-        .map(|h| format!(r#"<div class="bar" style="height:{h}%" title="{h} min"></div>"#))
+        .map(|&m| {
+            let h = if max == 0 {
+                5u64
+            } else {
+                ((m as f64 / max as f64) * 90.0 + 10.0) as u64
+            };
+            let label = if m == 0 {
+                "No activity".to_string()
+            } else {
+                format!("{m} min")
+            };
+            let active = if m > 0 { " active-bar" } else { "" };
+            format!(r#"<div class="bar{active}" style="height:{h}%" title="{label}"></div>"#)
+        })
         .collect::<Vec<_>>()
         .join("\n                ")
+}
+
+fn weekly_tip(stats: &DashboardStats) -> &'static str {
+    if stats.sessions_today == 0 {
+        "&#128161; Complete your first session today to start tracking progress!"
+    } else if stats.streak >= 7 {
+        "&#127942; Amazing! You're on a 7+ day streak. Keep it up!"
+    } else if stats.streak >= 3 {
+        "&#128293; You're on a roll! Keep the streak going."
+    } else {
+        "&#10024; Great work today! Every session counts."
+    }
+}
+
+// ── Breathing page ─────────────────────────────────────────────────────────────
+
+pub fn breathe_page() -> String {
+    let content = r#"<div class="row justify-content-center">
+    <div class="col-12 col-md-7 col-lg-5 text-center">
+
+        <h2 class="fw-bold text-calm mb-1">&#128168;&nbsp; Breathing Exercise</h2>
+        <p class="text-muted mb-0">Box breathing &mdash; 4 seconds each phase &bull; 5 cycles</p>
+
+        <!-- Breathing circle -->
+        <div id="breath-circle" class="breath-circle">&#127807;</div>
+
+        <!-- Phase label + countdown -->
+        <div id="phase-text" class="fw-bold fs-4 mb-1" style="color:var(--calm-mid)">Get Ready&hellip;</div>
+        <div id="countdown" class="display-6 fw-bold text-calm mb-3">&nbsp;</div>
+
+        <!-- Progress -->
+        <div class="d-flex justify-content-between mb-1">
+            <small class="text-muted">Cycle <span id="cycle-count">0</span> of 5</small>
+            <small class="text-muted" id="progress-label">0%</small>
+        </div>
+        <div class="calm-progress mb-4">
+            <div id="progress-bar" class="calm-progress-bar" style="width:0%"></div>
+        </div>
+
+        <!-- Complete banner (hidden until done) -->
+        <div id="session-done" class="session-done-banner">
+            <div style="font-size:2.5rem">&#127881;</div>
+            <h5 class="fw-bold text-calm mt-2 mb-1">Session Complete!</h5>
+            <p class="text-muted mb-3">You completed 5 rounds of box breathing. Well done!</p>
+            <form method="POST" action="/breathe/complete">
+                <button type="submit" class="btn btn-calm px-5 py-2">
+                    &#10003;&nbsp; Save &amp; Return to Dashboard
+                </button>
+            </form>
+        </div>
+
+        <!-- Back link -->
+        <div class="mt-4">
+            <a href="/dashboard" class="text-muted" style="font-size:.9rem">&#8592; Back to Dashboard</a>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    const PHASES = [
+        { name: "Inhale",  seconds: 4, expand: true  },
+        { name: "Hold",    seconds: 4, expand: true  },
+        { name: "Exhale",  seconds: 4, expand: false },
+        { name: "Hold",    seconds: 4, expand: false },
+    ];
+    const TOTAL_CYCLES = 5;
+    const TOTAL_STEPS  = TOTAL_CYCLES * PHASES.length; // 20
+
+    let cycle    = 0;
+    let phaseIdx = 0;
+    let tick     = PHASES[0].seconds; // seconds remaining in current phase
+
+    const circle      = document.getElementById('breath-circle');
+    const phaseText   = document.getElementById('phase-text');
+    const countdownEl = document.getElementById('countdown');
+    const cycleEl     = document.getElementById('cycle-count');
+    const progressBar = document.getElementById('progress-bar');
+    const progressLbl = document.getElementById('progress-label');
+    const doneDiv     = document.getElementById('session-done');
+
+    function applyCircle(expand) {
+        if (expand) {
+            circle.classList.add('expand');
+        } else {
+            circle.classList.remove('expand');
+        }
+    }
+
+    function render() {
+        const phase = PHASES[phaseIdx];
+        phaseText.textContent = phase.name;
+        countdownEl.textContent = tick;
+        cycleEl.textContent = cycle + 1;
+        applyCircle(phase.expand);
+
+        const completedSteps = cycle * PHASES.length + phaseIdx;
+        const pct = Math.round(completedSteps / TOTAL_STEPS * 100);
+        progressBar.style.width = pct + '%';
+        progressLbl.textContent = pct + '%';
+    }
+
+    // Small delay so first CSS transition fires
+    setTimeout(() => {
+        render();
+
+        const timer = setInterval(() => {
+            tick--;
+            if (tick <= 0) {
+                phaseIdx++;
+                if (phaseIdx >= PHASES.length) {
+                    phaseIdx = 0;
+                    cycle++;
+                }
+                if (cycle >= TOTAL_CYCLES) {
+                    clearInterval(timer);
+                    progressBar.style.width = '100%';
+                    progressLbl.textContent = '100%';
+                    phaseText.textContent = 'Well done!';
+                    countdownEl.textContent = '';
+                    doneDiv.style.display = 'block';
+                    return;
+                }
+                tick = PHASES[phaseIdx].seconds;
+            }
+            render();
+        }, 1000);
+    }, 300);
+}());
+</script>"#;
+
+    base_layout("Breathing Exercise", content, true)
+}
+
+// ── Meditation page ─────────────────────────────────────────────────────────────
+
+pub fn meditate_page() -> String {
+    let content = r#"<div class="row justify-content-center">
+    <div class="col-12 col-md-7 col-lg-5 text-center">
+
+        <h2 class="fw-bold mb-1" style="color:#512da8">&#127774;&nbsp; Guided Meditation</h2>
+        <p class="text-muted mb-0">Find a comfortable position, close your eyes, and breathe naturally</p>
+
+        <!-- Meditation orb -->
+        <div class="meditate-orb">&#129445;</div>
+
+        <!-- Timer display -->
+        <div id="timer-display" class="display-4 fw-bold mb-1" style="color:#512da8; font-variant-numeric: tabular-nums;">10:00</div>
+        <p id="timer-label" class="text-muted mb-3">remaining</p>
+
+        <!-- Progress -->
+        <div class="calm-progress mb-2" style="background:#ede7f6;">
+            <div id="progress-bar" class="calm-progress-bar" style="width:0%; background:linear-gradient(90deg,#7b3f8c,#b39ddb);"></div>
+        </div>
+
+        <!-- Cycling affirmation -->
+        <p id="affirmation" class="fst-italic text-muted mb-4" style="font-size:.95rem; min-height:1.5em;">&ldquo;You are present. You are calm.&rdquo;</p>
+
+        <!-- Complete banner -->
+        <div id="session-done" class="session-done-banner" style="border-color:#b39ddb; background:linear-gradient(135deg,#ede7f6,#d1c4e9);">
+            <div style="font-size:2.5rem">&#129309;</div>
+            <h5 class="fw-bold mt-2 mb-1" style="color:#512da8">Meditation Complete!</h5>
+            <p class="text-muted mb-3">10 mindful minutes. Your mind thanks you.</p>
+            <form method="POST" action="/meditate/complete">
+                <button type="submit" class="btn px-5 py-2"
+                        style="background:linear-gradient(135deg,#7b3f8c,#9b59b6);color:#fff;border:none;border-radius:10px;font-weight:500;">
+                    &#10003;&nbsp; Save &amp; Return to Dashboard
+                </button>
+            </form>
+        </div>
+
+        <!-- Skip / complete early -->
+        <form method="POST" action="/meditate/complete" class="mt-3" id="skip-form" style="display:none;">
+            <button type="submit" class="btn btn-sm"
+                    style="border:1.5px solid #9b59b6;color:#9b59b6;border-radius:8px;font-size:.85rem;">
+                &#9654;&nbsp; Mark Complete Early
+            </button>
+        </form>
+
+        <div class="mt-3">
+            <a href="/dashboard" class="text-muted" style="font-size:.9rem">&#8592; Back to Dashboard</a>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    const TOTAL = 600; // 10 minutes in seconds
+    let remaining = TOTAL;
+    let started = false;
+
+    const affirmations = [
+        "\u201cYou are present. You are calm.\u201d",
+        "\u201cLet thoughts pass like clouds.\u201d",
+        "\u201cBreathe in peace, breathe out tension.\u201d",
+        "\u201cThis moment is enough.\u201d",
+        "\u201cYou are safe. You are still.\u201d",
+        "\u201cEvery breath brings clarity.\u201d",
+        "\u201cYou deserve this time for yourself.\u201d",
+    ];
+    let affirmIdx = 0;
+
+    const timerEl   = document.getElementById('timer-display');
+    const labelEl   = document.getElementById('timer-label');
+    const bar       = document.getElementById('progress-bar');
+    const doneDiv   = document.getElementById('session-done');
+    const skipForm  = document.getElementById('skip-form');
+    const affirmEl  = document.getElementById('affirmation');
+
+    function fmt(s) {
+        const m = Math.floor(s / 60);
+        const sec = s % 60;
+        return m + ':' + String(sec).padStart(2, '0');
+    }
+
+    // Show skip button after 30 seconds
+    setTimeout(() => { skipForm.style.display = 'block'; }, 30000);
+
+    // Rotate affirmations every 30s
+    setInterval(() => {
+        affirmIdx = (affirmIdx + 1) % affirmations.length;
+        affirmEl.style.opacity = '0';
+        setTimeout(() => {
+            affirmEl.textContent = affirmations[affirmIdx];
+            affirmEl.style.opacity = '1';
+        }, 500);
+    }, 30000);
+    affirmEl.style.transition = 'opacity .5s';
+
+    const timer = setInterval(() => {
+        remaining--;
+        timerEl.textContent = fmt(remaining);
+        bar.style.width = ((TOTAL - remaining) / TOTAL * 100) + '%';
+
+        if (remaining <= 0) {
+            clearInterval(timer);
+            timerEl.textContent = '0:00';
+            labelEl.textContent = 'complete';
+            skipForm.style.display = 'none';
+            doneDiv.style.display = 'block';
+        }
+    }, 1000);
+}());
+</script>"#;
+
+    base_layout("Guided Meditation", content, true)
+}
+
+// ── Journal page ────────────────────────────────────────────────────────────────
+
+pub fn journal_page(error: Option<&str>) -> String {
+    let alert = error.map(|e| error_alert(e)).unwrap_or_default();
+
+    let content = format!(
+        r#"{alert}
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+
+        <h2 class="fw-bold text-calm mb-1">&#128221;&nbsp; Daily Mood Journal</h2>
+        <p class="text-muted mb-4">Take a moment to check in with yourself</p>
+
+        <form method="POST" action="/journal">
+
+            <!-- Mood picker -->
+            <div class="card p-4 mb-4">
+                <h5 class="fw-bold text-calm mb-3">How are you feeling right now?</h5>
+                <div class="d-flex justify-content-around">
+                    <div class="mood-option">
+                        <input type="radio" name="mood" id="m1" value="1" required>
+                        <label for="m1" title="Struggling">&#128542;</label>
+                    </div>
+                    <div class="mood-option">
+                        <input type="radio" name="mood" id="m2" value="2">
+                        <label for="m2" title="Not great">&#128533;</label>
+                    </div>
+                    <div class="mood-option">
+                        <input type="radio" name="mood" id="m3" value="3">
+                        <label for="m3" title="Okay">&#128528;</label>
+                    </div>
+                    <div class="mood-option">
+                        <input type="radio" name="mood" id="m4" value="4">
+                        <label for="m4" title="Good">&#128512;</label>
+                    </div>
+                    <div class="mood-option">
+                        <input type="radio" name="mood" id="m5" value="5">
+                        <label for="m5" title="Great">&#128513;</label>
+                    </div>
+                </div>
+                <p id="mood-label" class="text-muted text-center mt-3 mb-0" style="font-size:.9rem; min-height:1.2em;"></p>
+            </div>
+
+            <!-- Notes -->
+            <div class="card p-4 mb-4">
+                <h5 class="fw-bold text-calm mb-3">Any thoughts to capture? <span class="text-muted fw-normal" style="font-size:.85rem">(optional)</span></h5>
+                <textarea
+                    name="note"
+                    class="form-control"
+                    rows="5"
+                    placeholder="What's on your mind today? What are you grateful for? What felt hard?"
+                    style="resize:vertical;"
+                ></textarea>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-calm py-3 fs-5">
+                    &#128221;&nbsp; Save Journal Entry
+                </button>
+            </div>
+
+        </form>
+
+        <div class="text-center mt-4">
+            <a href="/dashboard" class="text-muted" style="font-size:.9rem">&#8592; Back to Dashboard</a>
+        </div>
+
+    </div>
+</div>
+
+<script>
+const labels = ['', 'Struggling \u2014 it\'s okay, you showed up', 'Not great \u2014 acknowledging it is the first step', 'Okay \u2014 steady and present', 'Good \u2014 keep that energy', 'Great \u2014 wonderful!'];
+document.querySelectorAll('input[name="mood"]').forEach(radio => {{
+    radio.addEventListener('change', () => {{
+        document.getElementById('mood-label').textContent = labels[radio.value] || '';
+    }});
+}});
+</script>"#
+    );
+
+    base_layout("Journal", &content, true)
 }
 
 // ── Profile page ───────────────────────────────────────────────────────────────

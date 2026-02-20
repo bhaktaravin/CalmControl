@@ -2,7 +2,7 @@ use axum::{
     Router,
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::get,
+    routing::{get, post},
 };
 use serde_json::json;
 use std::{env, sync::Arc};
@@ -15,7 +15,7 @@ mod state;
 mod store;
 mod templates;
 
-use handlers::{auth, dashboard, profile};
+use handlers::{auth, dashboard, profile, sessions};
 use state::AppState;
 use store::UserStore;
 
@@ -56,6 +56,14 @@ async fn main() {
         )
         .route("/dashboard", get(dashboard::show_dashboard))
         .route("/profile", get(profile::show_profile))
+        .route("/breathe", get(sessions::show_breathe))
+        .route("/breathe/complete", post(sessions::complete_breathe))
+        .route("/meditate", get(sessions::show_meditate))
+        .route("/meditate/complete", post(sessions::complete_meditate))
+        .route(
+            "/journal",
+            get(sessions::show_journal).post(sessions::submit_journal),
+        )
         .route("/health", get(health))
         .fallback(not_found)
         .with_state(app_state)

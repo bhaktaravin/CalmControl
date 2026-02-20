@@ -21,5 +21,8 @@ pub async fn show_dashboard(session: Session, State(state): State<Arc<AppState>>
         }
     };
 
-    Html(templates::dashboard_page(&user)).into_response()
+    let stats = state.user_store.get_stats(&user.id).await;
+    let weekly = state.user_store.get_weekly_minutes(&user.id).await;
+
+    Html(templates::dashboard_page(&user, &stats, &weekly)).into_response()
 }
